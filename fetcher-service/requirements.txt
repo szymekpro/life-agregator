@@ -1,0 +1,4 @@
+fastapi
+uvicorn
+python-dotenv>=1.0,<2.0
+fitatu-api @ git+https://github.com/Jezue/fitatu_library.git

@@ -1,0 +1,14 @@
+openapi: 3.1.0
+
+info:
+  title: Personal Board — Core Service
+  description: |
+    Design-first REST API contract for the Core Service.
+    Maintained in `modules/api-documentation` — not generated from controller annotations.
+  version: 0.1.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+paths: {}
