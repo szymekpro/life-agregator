@@ -57,12 +57,33 @@ def _round_num(value: Any, places: int = 1) -> float:
         return 0.0
 
 
+TARGET_MACROS = ("protein", "fat", "carbohydrate")
+
+PERCENT_FIELD_NAMES = {
+    "protein": ("proteinPercentage", "proteinPercent"),
+    "fat": ("fatPercentage", "fatPercent"),
+    "carbohydrate": ("carbohydratePercentage", "carbohydratePercent", "carbsPercentage"),
+}
+
+GRAM_FIELD_NAMES = {
+    "protein": ("proteinWeight",),
+    "fat": ("fatWeight",),
+    "carbohydrate": ("carbohydrateWeight",),
+}
+
+
 def _grams_from_percent(kcal: float, percent: float, kcal_per_gram: float) -> float:
     return _round_num(kcal * percent / 100 / kcal_per_gram)
 
 
+def _percent_from_grams(kcal: float, grams: float, kcal_per_gram: float) -> float:
+    if kcal <= 0:
+        return 0.0
+    return _round_num(grams * kcal_per_gram / kcal * 100)
+
+
 def _pick_number(value: Any) -> float | None:
-    if value is None:
+    if value is None or isinstance(value, bool):
         return None
     try:
         return float(value)
@@ -277,10 +298,25 @@ class FitatuService:
     ) -> dict[str, dict[str, Any]]:
         sources: dict[str, dict[str, Any]] = {}
 
+        day = target_date.isoformat()
         fetchers: dict[str, Callable[[], Any]] = {
+            "user_settings_new_day": lambda: client.request(
+                "GET",
+                f"/users/{user_id}/settings-new/{day}",
+            ),
             "user_settings_day": lambda: client.get_user_settings_for_day(user_id, target_date),
             "user_settings": lambda: client.get_user_settings(user_id, day=target_date),
             "diet_plan_settings": lambda: client.get_diet_plan_settings(user_id),
+            "day_summary": lambda: client.request(
+                "GET",
+                f"/diet-plan/{user_id}/summary/day",
+                params={"fromDate": day},
+            ),
+            "day_summary_v2": lambda: client.request(
+                "GET",
+                f"/v2/diet-plan/{user_id}/summary/custom",
+                params={"fromDate": day, "toDate": day},
+            ),
         }
 
         for name, fetch in fetchers.items():
@@ -304,50 +340,128 @@ class FitatuService:
     def _user_settings(sources: dict[str, dict[str, Any]]) -> dict[str, Any]:
         return sources.get("user_settings_day") or sources.get("user_settings", {})
 
-    @staticmethod
-    def _extract_calories(diet_plan: dict[str, Any]) -> float | None:
-        return (
-            _pick_positive_number(diet_plan.get("energy"))
-            or _pick_positive_number(diet_plan.get("calculatedEnergy"))
-            or _pick_positive_number(diet_plan.get("manualEnergyTarget"))
-        )
-
-    def _build_macro_overrides(self, calories: float) -> dict[str, float] | None:
-        overrides = self._config.fitatu_macro_overrides
-        if not overrides:
-            return None
-
-        macros: dict[str, float] = {
-            key: _round_num(value) for key, value in overrides.items()
-        }
-        percent_to_gram = {
-            "protein_percent": ("protein_g", "protein"),
-            "fat_percent": ("fat_g", "fat"),
-            "carbohydrate_percent": ("carbohydrate_g", "carbohydrate"),
-        }
-        for percent_key, (gram_key, nutrient) in percent_to_gram.items():
-            percent = macros.get(percent_key)
-            if percent is None or gram_key in macros:
+    @classmethod
+    def _diet_setting_blobs(cls, sources: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+        blobs: list[dict[str, Any]] = []
+        for key in ("user_settings_new_day", "user_settings_day", "user_settings"):
+            payload = sources.get(key)
+            if not isinstance(payload, dict):
                 continue
-            macros[gram_key] = _grams_from_percent(calories, percent, KCAL_PER_GRAM[nutrient])
+            nested = payload.get("userDietSettings")
+            blobs.append(nested if isinstance(nested, dict) else payload)
+        diet_plan = sources.get("diet_plan_settings")
+        if isinstance(diet_plan, dict) and diet_plan:
+            blobs.append(diet_plan)
+        return blobs
 
-        return macros or None
+    @classmethod
+    def _extract_calories(cls, diet_plan: dict[str, Any]) -> float | None:
+        for key in ("energy", "calculatedEnergy"):
+            value = _pick_positive_number(diet_plan.get(key))
+            if value is not None:
+                return value
+        raw = diet_plan.get("manualEnergyTarget")
+        if isinstance(raw, bool):
+            return None
+        return _pick_positive_number(raw)
+
+    @classmethod
+    def _extract_calories_from_sources(cls, sources: dict[str, dict[str, Any]]) -> float | None:
+        for blob in cls._diet_setting_blobs(sources):
+            calories = cls._extract_calories(blob)
+            if calories is not None:
+                return calories
+        energy = cls._summary_measure(sources, "energy")
+        return _pick_positive_number((energy or {}).get("current") or (energy or {}).get("max"))
+
+    @classmethod
+    def _extract_mode(cls, sources: dict[str, dict[str, Any]]) -> str | None:
+        for blob in cls._diet_setting_blobs(sources):
+            raw = blob.get("manualEnergyTarget")
+            if isinstance(raw, bool):
+                return "manual" if raw else "automatic"
+        return None
+
+    @staticmethod
+    def _summary_payload(sources: dict[str, dict[str, Any]]) -> dict[str, Any]:
+        for key in ("day_summary", "day_summary_v2"):
+            payload = sources.get(key)
+            if isinstance(payload, dict) and payload:
+                return payload
+        return {}
+
+    @classmethod
+    def _summary_measure(cls, sources: dict[str, dict[str, Any]], nutrient: str) -> dict[str, Any] | None:
+        raw = cls._summary_payload(sources).get(nutrient)
+        return raw if isinstance(raw, dict) else None
+
+    @classmethod
+    def _first_setting_number(cls, sources: dict[str, dict[str, Any]], field_names: tuple[str, ...]) -> float | None:
+        for blob in cls._diet_setting_blobs(sources):
+            for name in field_names:
+                value = _pick_number(blob.get(name))
+                if value is not None:
+                    return value
+        return None
 
     def _build_targets(
         self,
         sources: dict[str, dict[str, Any]],
         target_date: date,
     ) -> dict[str, Any]:
-        diet_plan = self._diet_plan_settings(sources)
-        calories = self._extract_calories(diet_plan)
+        calories = self._extract_calories_from_sources(sources)
+        mode = self._extract_mode(sources)
+        macros = self._build_macros_from_api(sources, calories)
 
         data: dict[str, Any] = {"date": target_date.isoformat()}
         if calories is not None:
             data["calories"] = _round_num(calories)
-            macros = self._build_macro_overrides(calories)
-            if macros:
-                data["macros"] = macros
+        if mode:
+            data["mode"] = mode
+        if macros:
+            data["macros"] = macros
         return data
+
+    def _build_macros_from_api(
+        self,
+        sources: dict[str, dict[str, Any]],
+        calories: float | None,
+    ) -> dict[str, float] | None:
+        macros: dict[str, float] = {}
+
+        for nutrient in TARGET_MACROS:
+            percent = self._first_setting_number(sources, PERCENT_FIELD_NAMES[nutrient])
+            grams = self._first_setting_number(sources, GRAM_FIELD_NAMES[nutrient])
+            summary = self._summary_measure(sources, nutrient) or {}
+            if grams is None:
+                grams = _pick_number(summary.get("current"))
+            gram_min = _pick_number(summary.get("min"))
+            gram_max = _pick_number(summary.get("max"))
+            kcal_per_gram = KCAL_PER_GRAM[nutrient]
+
+            if grams is None and calories is not None and percent is not None:
+                grams = _grams_from_percent(calories, percent, kcal_per_gram)
+            if percent is None and calories is not None and grams is not None and grams > 0:
+                percent = _percent_from_grams(calories, grams, kcal_per_gram)
+
+            if grams is not None:
+                macros[f"{nutrient}_g"] = _round_num(grams)
+            if percent is not None:
+                macros[f"{nutrient}_percent"] = _round_num(percent)
+            if gram_min is not None:
+                macros[f"{nutrient}_g_min"] = _round_num(gram_min)
+                if calories:
+                    macros[f"{nutrient}_percent_min"] = _percent_from_grams(
+                        calories, gram_min, kcal_per_gram,
+                    )
+            if gram_max is not None:
+                macros[f"{nutrient}_g_max"] = _round_num(gram_max)
+                if calories:
+                    macros[f"{nutrient}_percent_max"] = _percent_from_grams(
+                        calories, gram_max, kcal_per_gram,
+                    )
+
+        return macros or None
 
     def _resolve_goal_label(
         self,
@@ -384,7 +498,7 @@ class FitatuService:
         if goal_label:
             data["goal_label"] = goal_label
 
-        calories = self._extract_calories(diet_plan)
+        calories = self._extract_calories_from_sources(sources)
         if calories is not None:
             data["calories_target"] = _round_num(calories)
 

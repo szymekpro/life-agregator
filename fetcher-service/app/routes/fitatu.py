@@ -41,5 +41,5 @@ def daily_targets(
     request: Request,
     day: date | None = Query(default=None, description="Date (YYYY-MM-DD), defaults to today"),
 ) -> dict:
-    """Fetch daily calorie and macro targets from Fitatu settings."""
+    """Fetch daily calorie and macro targets from Fitatu Daily Goals."""
     return request.app.state.fitatu.fetch_targets(day)

@@ -93,11 +93,24 @@ class FitatuTargetsMacros(BaseModel):
     protein_percent: float | None = None
     fat_percent: float | None = None
     carbohydrate_percent: float | None = None
+    protein_g_min: float | None = None
+    protein_g_max: float | None = None
+    fat_g_min: float | None = None
+    fat_g_max: float | None = None
+    carbohydrate_g_min: float | None = None
+    carbohydrate_g_max: float | None = None
+    protein_percent_min: float | None = None
+    protein_percent_max: float | None = None
+    fat_percent_min: float | None = None
+    fat_percent_max: float | None = None
+    carbohydrate_percent_min: float | None = None
+    carbohydrate_percent_max: float | None = None
 
 
 class FitatuTargetsData(BaseModel):
     date: str
     calories: float | None = None
+    mode: str | None = None
     macros: FitatuTargetsMacros | None = None
 
 

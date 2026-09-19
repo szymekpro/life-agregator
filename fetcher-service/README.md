@@ -69,6 +69,46 @@ Runs at **http://localhost:5000**.
 
 Optional query param: `?day=2026-09-15` for a specific date.
 
+### Daily targets response
+
+`GET /api/v1/fitatu/targets` reads Fitatu **Cele dzienne** (kcal + macro split). Nothing is filled in from `.env`.
+
+- `mode: "automatic"` — Fitatu calculates the split; the app often shows **ranges** (e.g. protein 12–20%) rather than a single number.
+- `mode: "manual"` — you set your own split in Fitatu (e.g. 40% carbs). Then `protein_percent` / `fat_percent` / `carbohydrate_percent` and gram targets come from the API.
+
+```json
+{
+  "status": "ok",
+  "data": {
+    "date": "2026-09-19",
+    "calories": 2200,
+    "mode": "automatic",
+    "macros": {
+      "protein_g": 82.5,
+      "fat_g": 73.3,
+      "carbohydrate_g": 247.5,
+      "protein_percent": 15.0,
+      "fat_percent": 30.0,
+      "carbohydrate_percent": 45.0,
+      "protein_g_min": 66.0,
+      "protein_g_max": 110.0,
+      "fat_g_min": 61.1,
+      "fat_g_max": 73.3,
+      "carbohydrate_g_min": 247.5,
+      "carbohydrate_g_max": 385.0,
+      "protein_percent_min": 12.0,
+      "protein_percent_max": 20.0,
+      "fat_percent_min": 25.0,
+      "fat_percent_max": 30.0,
+      "carbohydrate_percent_min": 45.0,
+      "carbohydrate_percent_max": 70.0
+    }
+  }
+}
+```
+
+Fields that Fitatu does not send are omitted.
+
 ## Database
 
 SQLite file: `data/fetcher.sqlite` (created on first run).
