@@ -8,7 +8,259 @@ info:
   version: 0.1.0
 
 servers:
-  - url: http://localhost:8080
+  - url: http://localhost:8000
     description: Local development
 
-paths: {}
+tags:
+  - name: Dashboard sync
+    description: Pulls per-day data from the fetcher into the dashboard database.
+  - name: Dashboard food
+    description: Meals and daily macro targets, read from the dashboard database (never from Fitatu directly).
+
+paths:
+  /api/v1/dashboard/sync:
+    post:
+      tags: [Dashboard sync]
+      summary: Gap-fill the last days for every dataset
+      description: |
+        Walks the last `days` days (today included), newest first, and fetches from the fetcher only
+        what is missing, one day at a time. A dataset that was added later is back-filled the same way.
+        Stored days are skipped, except today (refreshed when stale) and past days that were synced
+        before they ended (they may be incomplete).
+
+        A failing day does not stop the run. If the fetcher is unreachable or not configured the run
+        stops and `aborted` is `true`. The first sync of a month can take minutes - one day costs
+        about a dozen Fitatu requests.
+      operationId: syncDashboardData
+      parameters:
+        - name: days
+          in: query
+          description: Window size in days, including today. Defaults to the configured lookback (30).
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 90
+        - name: force
+          in: query
+          description: Re-fetch every day in the window, even if it is already stored.
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: Run finished (check `failed` and `aborted` for partial results).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DaySyncResult"
+        "400":
+          description: '`days` is outside 1..90.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/dashboard/food/today:
+    get:
+      tags: [Dashboard food]
+      summary: Today's meals and macro progress
+      description: |
+        Refreshes today from the fetcher when it is missing or older than the stale threshold (15 minutes
+        by default), then returns it. If the refresh fails but an older copy exists, the older copy is returned.
+      operationId: getFoodToday
+      responses:
+        "200":
+          description: Today's food day.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FoodDay"
+        "503":
+          description: No data for today and it could not be synced (e.g. the fetcher is down).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/v1/dashboard/food/days:
+    get:
+      tags: [Dashboard food]
+      summary: Food history
+      description: |
+        Reads stored days from the database only - it never calls the fetcher. Days that were not synced
+        yet are simply absent; run `POST /api/v1/dashboard/sync` to fill them.
+      operationId: getFoodDays
+      parameters:
+        - name: from
+          in: query
+          description: First day (inclusive). Defaults to `to` minus the lookback window.
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          description: Last day (inclusive). Defaults to today.
+          required: false
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: Stored days in the range, oldest first.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FoodDay"
+        "400":
+          description: '`from` is after `to`, or the range is longer than 366 days.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  schemas:
+    FoodDay:
+      type: object
+      description: One day assembled from the `food.meals` and `food.targets` datasets.
+      required: [day, calories, protein, fat, carbohydrate, meals, syncedAt]
+      properties:
+        day:
+          type: string
+          format: date
+        calories:
+          $ref: "#/components/schemas/Progress"
+        protein:
+          $ref: "#/components/schemas/Progress"
+        fat:
+          $ref: "#/components/schemas/Progress"
+        carbohydrate:
+          $ref: "#/components/schemas/Progress"
+        targetMode:
+          type: [string, "null"]
+          description: How Fitatu sets the macro split. Null when no targets were synced.
+          enum: [automatic, manual, null]
+        meals:
+          type: array
+          description: Only meals that have items.
+          items:
+            $ref: "#/components/schemas/Meal"
+        syncedAt:
+          type: string
+          format: date-time
+          description: The oldest sync time of the datasets this day was built from.
+
+    Progress:
+      type: object
+      description: Consumed amount and target. Calories in kcal, macros in grams.
+      required: [consumed, target]
+      properties:
+        consumed:
+          type: number
+        target:
+          type: [number, "null"]
+          description: Null when Fitatu sent no target for that day.
+
+    Meal:
+      type: object
+      required: [name, calories, protein, fat, carbohydrate, items]
+      properties:
+        name:
+          type: string
+        calories:
+          type: number
+        protein:
+          type: number
+        fat:
+          type: number
+        carbohydrate:
+          type: number
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/MealItem"
+
+    MealItem:
+      type: object
+      required: [name, calories, protein, fat, carbohydrate, eaten]
+      properties:
+        name:
+          type: string
+        calories:
+          type: number
+        protein:
+          type: number
+        fat:
+          type: number
+        carbohydrate:
+          type: number
+        eaten:
+          type: boolean
+
+    DaySyncResult:
+      type: object
+      required: [aborted, datasets]
+      properties:
+        aborted:
+          type: boolean
+          description: The fetcher was unavailable, so the remaining days were not attempted.
+        datasets:
+          type: object
+          description: Result per dataset key, e.g. `food.meals`, `food.targets`.
+          additionalProperties:
+            $ref: "#/components/schemas/DatasetResult"
+
+    DatasetResult:
+      type: object
+      required: [synced, skippedExisting, failed]
+      properties:
+        synced:
+          type: array
+          description: Days fetched and stored in this run.
+          items:
+            type: string
+            format: date
+        skippedExisting:
+          type: integer
+          description: Days that were already stored and did not need a refresh.
+        failed:
+          type: array
+          items:
+            $ref: "#/components/schemas/FailedDay"
+
+    FailedDay:
+      type: object
+      required: [day, reason]
+      properties:
+        day:
+          type: string
+          format: date
+        reason:
+          type: string
+
+    Error:
+      type: object
+      description: RFC 9457 problem details.
+      required: [status, title]
+      properties:
+        type:
+          type: string
+          format: uri
+          default: about:blank
+        title:
+          type: string
+          description: HTTP reason phrase, e.g. `Bad Request`.
+        status:
+          type: integer
+        detail:
+          type: string
+          description: What went wrong, e.g. `from must not be after to`.
+        instance:
+          type: string
+          format: uri
+          description: The request path.

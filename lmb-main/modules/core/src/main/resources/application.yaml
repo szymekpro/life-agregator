@@ -1,16 +1,30 @@
+server:
+  port: ${SERVER_PORT:8000}
+
 spring:
   application:
     name: lmb-core
   datasource:
-    url: ${DB_URL:jdbc:postgresql://localhost:5432/lmb_core}
-    username: ${DB_USER:lmb}
-    password: ${DB_PASSWORD:lmb}
+    # Same defaults as docker-compose.yml — `docker compose up -d` then run core, no env vars needed.
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/postgres}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
   flyway:
     enabled: true
     locations: classpath:db/migration
 
+lmb:
+  fetcher:
+    # fetcher-service (../fetcher-service) listens on 5000
+    base-url: ${FETCHER_BASE_URL:http://localhost:5000}
+  day-sync:
+    lookback-days: ${DAY_SYNC_LOOKBACK_DAYS:30}
+    stale-today-minutes: ${DAY_SYNC_STALE_TODAY_MINUTES:15}
+    zone: ${DAY_SYNC_ZONE:Europe/Warsaw}
+
 springdoc:
-  api-docs:
-    enabled: false
+  # Keep api-docs.enabled at its default (true): setting it to false switches off all of springdoc, Swagger UI included.
+  # The spec is design-first (static YAML), so only the generated /v3/api-docs is turned off.
+  enable-default-api-docs: false
   swagger-ui:
     url: /openapi/openapi.yaml

@@ -12,6 +12,7 @@ DATA_DIR = BASE_DIR / "data"
 
 @dataclass(frozen=True)
 class AppConfig:
+    port: int
     debug: bool
     log_level: str
     database_path: Path
@@ -26,6 +27,7 @@ class AppConfig:
 def load_config() -> AppConfig:
     debug = os.getenv("DEBUG", "0") == "1"
     return AppConfig(
+        port=int(os.getenv("PORT", "5000")),
         debug=debug,
         log_level=os.getenv("LOG_LEVEL", "DEBUG" if debug else "INFO"),
         database_path=Path(os.getenv("DATABASE_PATH", str(DATA_DIR / "fetcher.sqlite"))),

@@ -9,10 +9,10 @@ python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
 copy .env.example .env   # fill FITATU_EMAIL / FITATU_PASSWORD
-uvicorn main:app --reload --port 5000
+python main.py
 ```
 
-Runs at **http://localhost:5000**.
+Runs at **http://localhost:5000** (change with `PORT` in `.env`). Start it with `python main.py`; a bare `uvicorn main:app` ignores `main.py` and listens on uvicorn's default **8000**, which is Core's port. If you prefer the uvicorn CLI, pass the port: `uvicorn main:app --reload --port 5000`.
 
 ## API
 

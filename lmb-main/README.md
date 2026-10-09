@@ -26,7 +26,8 @@ Build a modular Personal Dashboard that centralizes day-to-day tracking and deci
 ### Design Principles
 
 - **Evolutionary Architecture** — structure evolves with actual needs
-- **YAGNI** — add capabilities only when real usage demands them
+- **YAGNI (features)** — add capabilities only when real usage demands them
+- **Clean OO code** — SOLID, abstractions, inheritance and design patterns where they fit (interfaces at real boundaries, not forced); prefer Java 17-style code and no custom generics, Java 21 is fine when it is simpler. Details in [AGENTS.md](./AGENTS.md)
 
 ## Planned Modules
 
@@ -79,8 +80,8 @@ lmb-main/
     ├── database/                   ← Flyway SQL migrations (PostgreSQL)
     ├── api-documentation/          ← OpenAPI specs (design-first, no inline annotations)
     ├── auth/                       ← core domain: users, sessions, permissions
-    ├── dashboard/                  ← (planned) widget layout
-    ├── fitness-adapter/            ← (planned) REST client + DTO mapping for Fitness service
+    ├── dashboard/                  ← dashboard read model: day-based sync engine + widget endpoints
+    ├── fitness-adapter/            ← REST client + DTO mapping for the fetcher service (Fitatu)
     ├── finance-adapter/            ← (planned) REST client + DTO mapping for Finance service
     └── diabetes-adapter/           ← (planned) REST client + DTO mapping for Diabetes service
 ```
@@ -96,3 +97,26 @@ lmb-main/
 **Adapter modules** — translate external service API contracts into Core-friendly models. No Fitness/Finance/Diabetes business rules here.
 
 External domain services stay separate deployables; this repo is only the Core Service and its integration adapters.
+
+## Local run
+
+| Service | Port | Where |
+|---------|------|-------|
+| Core (this repo) | **8000** | `lmb-main`, Swagger: http://localhost:8000/swagger-ui.html |
+| Fetcher (Fitatu) | **5000** | `../fetcher-service`, Swagger: http://localhost:5000/docs |
+| PostgreSQL | 5432 | `docker-compose.yml` (db / user / password: `postgres`) |
+
+`application.yaml` has the same defaults (Postgres on `localhost:5432`, fetcher on `http://localhost:5000`), so nothing needs configuring. Override with `SERVER_PORT`, `FETCHER_BASE_URL`, `DB_URL`, `DB_USER`, `DB_PASSWORD`. Flyway applies migrations on startup.
+
+Start in this order, each in its own terminal:
+
+```bash
+# 1. database
+docker compose up -d
+
+# 2. fetcher (needs .env with FITATU_EMAIL / FITATU_PASSWORD, see ../fetcher-service/README.md)
+cd ../fetcher-service && python main.py
+
+# 3. core
+./mvnw -pl modules/core -am spring-boot:run
+```

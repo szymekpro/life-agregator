@@ -28,6 +28,14 @@
             <artifactId>lmb-auth</artifactId>
         </dependency>
         <dependency>
+            <groupId>com.szymek.board</groupId>
+            <artifactId>lmb-dashboard</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.szymek.board</groupId>
+            <artifactId>lmb-fitness-adapter</artifactId>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webmvc</artifactId>
         </dependency>
@@ -64,7 +72,7 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <scope>annotationProcessor</scope>
+            <optional>true</optional>
         </dependency>
     </dependencies>
 
@@ -73,6 +81,9 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <skip>false</skip>
+                </configuration>
             </plugin>
         </plugins>
     </build>
