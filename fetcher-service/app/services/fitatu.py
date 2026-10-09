@@ -341,11 +341,7 @@ class FitatuService:
         return sources.get("user_settings_day") or sources.get("user_settings", {})
 
     @classmethod
-<<<<<<< Updated upstream
     def _diet_setting_blobs(cls, sources: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
-=======
-    def _diet_setting_blobs(cls, sources: dict) -> list[dict[str, Any]]:
->>>>>>> Stashed changes
         blobs: list[dict[str, Any]] = []
         for key in ("user_settings_new_day", "user_settings_day", "user_settings"):
             payload = sources.get(key)
@@ -370,11 +366,7 @@ class FitatuService:
         return _pick_positive_number(raw)
 
     @classmethod
-<<<<<<< Updated upstream
     def _extract_calories_from_sources(cls, sources: dict[str, dict[str, Any]]) -> float | None:
-=======
-    def _extract_calories_from_sources(cls, sources: dict) -> float | None:
->>>>>>> Stashed changes
         for blob in cls._diet_setting_blobs(sources):
             calories = cls._extract_calories(blob)
             if calories is not None:
@@ -383,11 +375,7 @@ class FitatuService:
         return _pick_positive_number((energy or {}).get("current") or (energy or {}).get("max"))
 
     @classmethod
-<<<<<<< Updated upstream
     def _extract_mode(cls, sources: dict[str, dict[str, Any]]) -> str | None:
-=======
-    def _extract_mode(cls, sources: dict) -> str | None:
->>>>>>> Stashed changes
         for blob in cls._diet_setting_blobs(sources):
             raw = blob.get("manualEnergyTarget")
             if isinstance(raw, bool):
@@ -395,11 +383,7 @@ class FitatuService:
         return None
 
     @staticmethod
-<<<<<<< Updated upstream
     def _summary_payload(sources: dict[str, dict[str, Any]]) -> dict[str, Any]:
-=======
-    def _summary_payload(sources: dict) -> dict[str, Any]:
->>>>>>> Stashed changes
         for key in ("day_summary", "day_summary_v2"):
             payload = sources.get(key)
             if isinstance(payload, dict) and payload:
@@ -407,20 +391,12 @@ class FitatuService:
         return {}
 
     @classmethod
-<<<<<<< Updated upstream
     def _summary_measure(cls, sources: dict[str, dict[str, Any]], nutrient: str) -> dict[str, Any] | None:
-=======
-    def _summary_measure(cls, sources: dict, nutrient: str) -> dict[str, Any] | None:
->>>>>>> Stashed changes
         raw = cls._summary_payload(sources).get(nutrient)
         return raw if isinstance(raw, dict) else None
 
     @classmethod
-<<<<<<< Updated upstream
     def _first_setting_number(cls, sources: dict[str, dict[str, Any]], field_names: tuple[str, ...]) -> float | None:
-=======
-    def _first_setting_number(cls, sources: dict, field_names: tuple[str, ...]) -> float | None:
->>>>>>> Stashed changes
         for blob in cls._diet_setting_blobs(sources):
             for name in field_names:
                 value = _pick_number(blob.get(name))
@@ -448,11 +424,7 @@ class FitatuService:
 
     def _build_macros_from_api(
         self,
-<<<<<<< Updated upstream
         sources: dict[str, dict[str, Any]],
-=======
-        sources: dict,
->>>>>>> Stashed changes
         calories: float | None,
     ) -> dict[str, float] | None:
         macros: dict[str, float] = {}
